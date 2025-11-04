@@ -1,13 +1,13 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
-streamlit==1.39.0
-torch==1.12.0
-torchvision==0.13.0
-yolov5==7.0.9
-opencv-python-headless==4.8.0.76
-pandas==1.5.3
-numpy==1.23.5
-Pillow==10.3.0
+streamlit
+torch
+torchvision
+opencv-python-headless
+pandas
+numpy
+Pillow
 protobuf==3.20.3
-requests==2.31.0
-matplotlib==3.7.1
-tqdm==4.66.1
+requests
+matplotlib
+tqdm
+ultralytics
