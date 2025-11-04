@@ -3,131 +3,143 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import torch
-import os
 
-# Configuración de página Streamlit
+# --------------------------------------------------------
+# CONFIGURACIÓN DE PÁGINA
+# --------------------------------------------------------
 st.set_page_config(
-    page_title="Detección de Objetos en Imágenes",
-    page_icon="🔍",
+    page_title="Reconóceme esto",
+    page_icon="🧠",
     layout="wide"
 )
 
 # --------------------------------------------------------
-# FUNCIÓN PARA CARGAR EL MODELO YOLOv5
+# ESTILOS PERSONALIZADOS
+# --------------------------------------------------------
+st.markdown("""
+    <style>
+    body {
+        background-color: white;
+        color: black;
+        font-family: 'Helvetica', sans-serif;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #f7f7f7;
+        color: black;
+    }
+    h1, h2, h3, h4 {
+        color: #111 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --------------------------------------------------------
+# CARGA DEL MODELO YOLOv5
 # --------------------------------------------------------
 @st.cache_resource
 def load_yolov5_model():
     try:
-        # Cargar el modelo YOLOv5 directamente desde Ultralytics (sin necesidad de instalar yolov5)
         model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
         return model
     except Exception as e:
         st.error(f"❌ Error al cargar el modelo: {str(e)}")
         st.info("""
         Recomendaciones:
-        1. Verifica tu conexión a Internet (Streamlit Cloud tiene conexión por defecto)
+        1. Verifica tu conexión a Internet (Streamlit Cloud la tiene por defecto)
         2. Intenta recargar la app si el modelo no carga la primera vez
         3. Si persiste, revisa la consola de logs en 'Manage App'
         """)
         return None
 
 # --------------------------------------------------------
-# INTERFAZ PRINCIPAL
+# ENCABEZADO Y NARRATIVA
 # --------------------------------------------------------
-st.title("🔍 Detección de Objetos en Imágenes")
+st.title("🧠 Reconóceme esto")
 st.markdown("""
-Esta aplicación utiliza **YOLOv5** para detectar objetos en imágenes capturadas con tu cámara.
-Ajusta los parámetros en la barra lateral para personalizar la detección.
+### Experimento sobre cómo una red neuronal nombra el mundo  
+Esta aplicación usa **YOLOv5** —una red de visión artificial— para identificar objetos visibles en imágenes.  
+Cada vez que subes o capturas una foto, la IA intenta traducir la realidad en palabras.  
 """)
 
-# Cargar el modelo YOLOv5
-with st.spinner("Cargando modelo YOLOv5..."):
+# --------------------------------------------------------
+# CARGAR MODELO
+# --------------------------------------------------------
+with st.spinner("Cargando modelo de visión..."):
     model = load_yolov5_model()
 
 # --------------------------------------------------------
-# SI EL MODELO SE CARGA CORRECTAMENTE
+# FUNCIONALIDAD PRINCIPAL
 # --------------------------------------------------------
 if model:
-    st.sidebar.title("Parámetros")
-
-    # Configuración de confianza e IoU
+    st.sidebar.title("Parámetros de detección")
     model.conf = st.sidebar.slider('Confianza mínima', 0.0, 1.0, 0.25, 0.01)
     model.iou = st.sidebar.slider('Umbral IoU', 0.0, 1.0, 0.45, 0.01)
     st.sidebar.caption(f"Confianza: {model.conf:.2f} | IoU: {model.iou:.2f}")
 
-    # Otras opciones
-    try:
-        model.agnostic = st.sidebar.checkbox('NMS class-agnostic', False)
-        model.multi_label = st.sidebar.checkbox('Múltiples etiquetas por caja', False)
-        model.max_det = st.sidebar.number_input('Detecciones máximas', 10, 2000, 1000, 10)
-    except:
-        st.sidebar.warning("Algunas opciones avanzadas no están disponibles con esta configuración")
+    model.agnostic = st.sidebar.checkbox('NMS class-agnostic', False)
+    model.multi_label = st.sidebar.checkbox('Múltiples etiquetas por caja', False)
+    model.max_det = st.sidebar.number_input('Detecciones máximas', 10, 2000, 1000, 10)
 
-    # --------------------------------------------------------
-    # CAPTURAR IMAGEN DE LA CÁMARA
-    # --------------------------------------------------------
-    picture = st.camera_input("📸 Captura una imagen para analizar")
+    # Subir o capturar imagen
+    st.markdown("### 📷 Sube una imagen o usa la cámara")
+    col1, col2 = st.columns(2)
+    with col1:
+        picture = st.camera_input("Capturar desde la cámara")
+    with col2:
+        uploaded_file = st.file_uploader("Subir una imagen", type=["jpg", "jpeg", "png"])
 
+    img_source = None
     if picture:
-        # Procesar imagen capturada
-        bytes_data = picture.getvalue()
-        cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+        img_source = picture.getvalue()
+    elif uploaded_file:
+        img_source = uploaded_file.getvalue()
 
-        # Detección con YOLOv5
-        with st.spinner("Detectando objetos..."):
+    if img_source:
+        cv2_img = cv2.imdecode(np.frombuffer(img_source, np.uint8), cv2.IMREAD_COLOR)
+        with st.spinner("Analizando la imagen..."):
             try:
                 results = model(cv2_img)
             except Exception as e:
                 st.error(f"Error durante la detección: {str(e)}")
                 st.stop()
 
-        # --------------------------------------------------------
-        # MOSTRAR RESULTADOS
-        # --------------------------------------------------------
-        try:
-            predictions = results.pred[0]
-            boxes = predictions[:, :4]
-            scores = predictions[:, 4]
-            categories = predictions[:, 5]
+        # Resultados
+        predictions = results.pred[0]
+        boxes = predictions[:, :4]
+        scores = predictions[:, 4]
+        categories = predictions[:, 5]
 
-            col1, col2 = st.columns(2)
+        col3, col4 = st.columns(2)
+        with col3:
+            st.subheader("📸 Imagen analizada")
+            results.render()
+            st.image(results.ims[0], channels='BGR', use_container_width=True)
 
-            with col1:
-                st.subheader("📷 Imagen con detecciones")
-                results.render()
-                # Mostrar la imagen con detecciones
-                st.image(results.ims[0], channels='BGR', use_container_width=True)
+        with col4:
+            st.subheader("🗂️ Objetos reconocidos")
 
-            with col2:
-                st.subheader("📋 Objetos detectados")
+            label_names = model.names
+            category_count = {}
+            for category in categories:
+                idx = int(category.item()) if hasattr(category, 'item') else int(category)
+                category_count[idx] = category_count.get(idx, 0) + 1
 
-                label_names = model.names
-                category_count = {}
+            data = []
+            for category, count in category_count.items():
+                label = label_names[category]
+                confidence = scores[categories == category].mean().item() if len(scores) > 0 else 0
+                data.append({
+                    "Categoría": label,
+                    "Cantidad": count,
+                    "Confianza promedio": f"{confidence:.2f}"
+                })
 
-                for category in categories:
-                    idx = int(category.item()) if hasattr(category, 'item') else int(category)
-                    category_count[idx] = category_count.get(idx, 0) + 1
-
-                data = []
-                for category, count in category_count.items():
-                    label = label_names[category]
-                    confidence = scores[categories == category].mean().item() if len(scores) > 0 else 0
-                    data.append({
-                        "Categoría": label,
-                        "Cantidad": count,
-                        "Confianza promedio": f"{confidence:.2f}"
-                    })
-
-                if data:
-                    df = pd.DataFrame(data)
-                    st.dataframe(df, use_container_width=True)
-                    st.bar_chart(df.set_index('Categoría')['Cantidad'])
-                else:
-                    st.info("No se detectaron objetos con los parámetros actuales.")
-                    st.caption("Prueba a reducir el umbral de confianza.")
-        except Exception as e:
-            st.error(f"Error al procesar los resultados: {str(e)}")
-            st.stop()
+            if data:
+                df = pd.DataFrame(data)
+                st.dataframe(df, use_container_width=True)
+                st.bar_chart(df.set_index('Categoría')['Cantidad'])
+            else:
+                st.info("No se detectaron objetos. Prueba otra imagen.")
 else:
     st.error("❌ No se pudo cargar el modelo. Verifica dependencias o conexión e inténtalo nuevamente.")
 
@@ -136,6 +148,6 @@ else:
 # --------------------------------------------------------
 st.markdown("---")
 st.caption("""
-**Desarrollado por Isabela Aristizábal**  
-App de detección de objetos con **YOLOv5 + Streamlit + PyTorch**.
+**“Reconóceme esto”** — Experimento visual sobre cómo una red neuronal nombra el mundo.  
+Creado por **Isabela Aristizábal** • YOLOv5 + Streamlit + PyTorch.
 """)
